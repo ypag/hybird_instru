@@ -1,0 +1,154 @@
+// Program is written by my project partner Yeliz Karadayi http://ykfab.wordpress.com/
+
+
+#include <Servo.h>
+//orange to ground
+//red to 24
+//green outputs 24
+Servo arms;
+Servo head;
+
+int distThresh = 600;
+int soundThresh = 600;
+
+int distSensor = 0;
+int microphone = 1;
+
+int armsPin = 9;
+int headPin = 10;
+
+int const smootheFC = 3;
+int thisSmooth = 0;
+int smoother[smootheFC];
+int average;
+int total;
+
+int const trackFC = 10;
+int thisFrame = 0;
+int trackMovement[trackFC];
+
+int frameCounter= 0;
+int timeToMove = 1000;
+int averageGen = 0;
+
+int const stateCount = 5;
+int stateIndex = 0;
+int states= 0;
+int saveStates[stateCount];
+
+void setup() 
+{
+arms.attach(armsPin);
+pinMode(7, OUTPUT);
+pinMode(distSensor, INPUT);
+
+Serial.begin(57600);
+
+for(int i = 0; i < smootheFC; i++){
+//smoothes
+smoother[i] = 0;
+}
+}
+
+void loop() {
+
+frameCounter ++;
+int distance = analogRead(distSensor);
+averageGen = 0;
+
+if (frameCounter == timeToMove){ 
+// Serial.println(thisSmooth);
+
+total = total – smoother[thisSmooth];
+smoother[thisSmooth] = distance;
+total = total + smoother[thisSmooth];
+thisSmooth ++;
+
+if (thisSmooth >= smootheFC) 
+{
+// Serial.println(“thisSmooth = 0″);
+thisSmooth = 0;
+}
+
+Serial.print(“[“);
+for(int i = 0; i < trackFC-1; i++){
+
+Serial.print(trackMovement[i]);
+Serial.print(“, “);
+}
+
+Serial.println(“]”);
+
+average = total / smootheFC;
+
+for(int i = trackFC -1; i > 0; i–)
+{
+trackMovement[i] = trackMovement[i-1];
+trackMovement[0] = average;
+}
+
+for(int i = 0; i < trackFC-1; i++) averageGen += (trackMovement[i+1] – trackMovement[i]);
+
+int score = 0;
+boolean sameState = false;
+
+for(int i = 0; i < stateCount-1; i++)
+{
+if (saveStates[i] == saveStates[i-1]) score++;
+if (score > 2) {
+sameState = true;
+Serial.println(“^” );
+}
+}
+
+Serial.println(averageGen );
+if ((averageGen <= -400) && (trackMovement[trackFC-1] != 0))
+{
+states = 4;
+timeToMove = 2000;
+Serial.println(“DON’T HIT ME!!!” );
+arms.write(0);
+}
+else if (average < 200 && averageGen < 50 && averageGen > -50 ) 
+{
+
+states = 0;
+timeToMove = 1000;
+Serial.println(“Guess I’m alone!” );
+
+arms.write(0);
+}
+else if (average > distThresh && averageGen < 50 && averageGen > -50)
+{
+states = 1;
+timeToMove = 3000;
+Serial.println(“PET ME!” );
+arms.write(120);
+}
+else if ((averageGen <= 0) && (averageGen > -200)) 
+{
+states = 2;
+timeToMove = 1000;
+Serial.println(“you are getting closerclosercloser to me!” );
+}
+else if ((averageGen >= 0) && (averageGen < 200)) 
+{
+states = 3;
+timeToMove = 2000;
+Serial.println(“you are getting farther from me!”);
+}
+else if (averageGen >= 400) 
+{
+states = 5;
+timeToMove = 5000;
+Serial.println(“WHERE DID YOU GO!?”);
+}
+Serial.write(states);
+
+saveStates[stateIndex] = states;
+stateIndex++;
+if (stateIndex == stateCount) stateIndex = 0;
+
+frameCounter = 0;
+}
+}
